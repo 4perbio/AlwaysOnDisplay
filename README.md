@@ -128,6 +128,25 @@ Every push to `main` triggers `.github/workflows/release.yml`. It runs the tests
 | `#minor`                     | `1.2.3` → `1.3.0`   |
 | `#major`                     | `1.2.3` → `2.0.0`   |
 
+### CurseForge
+
+After the GitHub release, the same zip is uploaded to CurseForge and tagged with the WoW Forever game version (`1.60.1`). The release notes are used as the changelog. The upload is skipped until both of these are set in the GitHub repo under **Settings → Secrets and variables → Actions**:
+
+| Name              | Kind     | Value                                                                    |
+|-------------------|----------|--------------------------------------------------------------------------|
+| `CF_API_KEY`      | Secret   | CurseForge API token (Account settings → API tokens)                     |
+| `CF_PROJECT_ID`   | Variable | The numeric Project ID from the "About Project" box, not the URL name    |
+| `CF_GAME_VERSION` | Variable | *Optional.* Game version name, if Forever moves past `1.60.1`            |
+
+From a terminal:
+
+```powershell
+gh secret set CF_API_KEY -R 4perbio/AlwaysOnDisplay          # prompts for the token
+gh variable set CF_PROJECT_ID -R 4perbio/AlwaysOnDisplay --body 123456
+```
+
+The upload logic is in `.github/scripts/curseforge-upload.sh`.
+
 The first release uses the version already written in `AlwaysOnDisplay.toc` (`1.0.0`). After that, the git tags are the source of truth. The `## Version:` line in the repository is not updated, so only the release zip carries the real number.
 
 Fengari runs Lua 5.3, but the game runs Lua 5.1. Keep the addon code to features both versions have: no `//`, no `goto`, no integer-only operations.
