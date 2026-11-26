@@ -1,0 +1,12 @@
+{
+  "name": "alwaysondisplay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WoW Forever addon: always-visible health and resource values on the player and target frames.",
+  "scripts": {
+    "test": "node tests/run.js"
+  },
+  "devDependencies": {
+    "fengari": "^0.1.4"
+  }
+}

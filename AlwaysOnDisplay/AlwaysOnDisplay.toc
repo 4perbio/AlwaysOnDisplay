@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: AlwaysOnDisplay
+## Notes: Always shows health and mana/energy/rage values on the player and target frames.
+## Author: Alejandro Perez
+## Version: 1.0.0
+## SavedVariables: AlwaysOnDisplayDB
+
+Core.lua
+Options.lua
