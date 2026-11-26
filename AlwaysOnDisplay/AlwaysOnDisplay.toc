@@ -4,6 +4,9 @@
 ## Author: Alejandro Perez
 ## Version: 1.0.0
 ## SavedVariables: AlwaysOnDisplayDB
+## IconTexture: Interface\AddOns\AlwaysOnDisplay\Icon
+## AddonCompartmentFunc: AlwaysOnDisplay_OnAddonCompartmentClick
 
 Core.lua
 Options.lua
+Minimap.lua

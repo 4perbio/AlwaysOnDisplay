@@ -7,6 +7,8 @@ ns.defaults = {
     targetPower  = true,
     format       = "BOTH",   -- "VALUE" | "PERCENT" | "BOTH"
     shortNumbers = true,
+    minimapButton = true,
+    minimapAngle = 225,      -- not shown in the panel; set by dragging the button
 }
 
 -- key -> { unit, kind, setting, bar, overlay, text }

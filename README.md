@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo-400.png" alt="AlwaysOnDisplay logo" width="200"></p>
+
 # AlwaysOnDisplay
 
 A World of Warcraft **Forever** addon that always shows the numbers for your health and resource (mana, energy, rage) on the default player and target frames. You don't have to hover over a bar to see them.
@@ -19,6 +21,7 @@ A World of Warcraft **Forever** addon that always shows the numbers for your hea
 - Enemy targets show `45%`. Forever's Classic-style servers only give a percentage for enemy health, not real numbers. Party and raid members, and you, show full values.
 - Dead and ghost units show `Dead` or `Ghost`. The resource text is hidden for targets with no resource.
 - While the addon's text is on for a bar, it hides the game's own hover text on that bar so the two never overlap.
+- A minimap button opens the settings. Drag it to move it around the minimap, or hide it. There's also an entry in the minimap's **AddOns** menu.
 
 ## Installation
 
@@ -47,8 +50,11 @@ New-Item -ItemType Junction `
 
 Everything is on by default. To change it:
 
-- Open **Options → AddOns → AlwaysOnDisplay**, or
+- click the **AlwaysOnDisplay minimap button** (or its entry in the minimap's AddOns menu),
+- open **Options → AddOns → AlwaysOnDisplay**, or
 - type `/aod` to open that panel directly.
+
+Drag the minimap button to move it along the minimap edge. Its position is saved.
 
 | Option          | Default             | What it does                                              |
 |-----------------|---------------------|-----------------------------------------------------------|
@@ -58,6 +64,7 @@ Everything is on by default. To change it:
 | Target resource | on                  | Mana / energy / rage text on the target frame             |
 | Text format     | `1234 / 2000 (62%)` | Value and percent, value only, or percent only            |
 | Short numbers   | on                  | Shortens numbers from 10,000 up (`12.3k`, `1.5m`)         |
+| Show minimap button | on              | The settings button on the minimap edge                   |
 
 Changes apply immediately and are saved account-wide in `WTF\Account\<account>\SavedVariables\AlwaysOnDisplay.lua`.
 
@@ -66,7 +73,8 @@ Changes apply immediately and are saved account-wide in `WTF\Account\<account>\S
 | Command      | Effect                          |
 |--------------|---------------------------------|
 | `/aod`       | Open the options panel          |
-| `/aod reset` | Restore all options to defaults |
+| `/aod minimap` | Show or hide the minimap button |
+| `/aod reset` | Restore all options to defaults, including the minimap button's position |
 
 ## Troubleshooting
 
@@ -86,9 +94,11 @@ The addon draws **its own text** on top of each Blizzard bar rather than switchi
 
 ```
 AlwaysOnDisplay/
-├── AlwaysOnDisplay.toc   addon info (Interface 16001, SavedVariables)
+├── AlwaysOnDisplay.toc   addon info (Interface 16001, SavedVariables, icon, AddOns-menu entry)
+├── Icon.tga              64×64 icon (AddOns list, minimap button)
 ├── Core.lua              finding the bars, formatting, event handling
-└── Options.lua           settings panel and /aod
+├── Options.lua           settings panel and /aod
+└── Minimap.lua           minimap button and AddOns-menu entry
 ```
 
 - **`Core.lua`**
@@ -97,6 +107,7 @@ AlwaysOnDisplay/
   - `UpdateDisplay` reads `UnitHealth` and `UnitPower(unit, UnitPowerType(unit))`, then formats the result.
   - The events listened to are `PLAYER_LOGIN`, `PLAYER_ENTERING_WORLD`, `PLAYER_TARGET_CHANGED`, plus `UNIT_HEALTH`, `UNIT_MAXHEALTH`, `UNIT_POWER_UPDATE`, `UNIT_POWER_FREQUENT`, `UNIT_MAXPOWER`, `UNIT_DISPLAYPOWER` and `UNIT_FLAGS`. The unit events only fire for `player` and `target`.
 - **`Options.lua`**: builds the panel with the modern `Settings` API (`RegisterVerticalLayoutCategory`, `RegisterAddOnSetting`, `CreateCheckbox`, `CreateDropdown`). Each setting is bound directly to `AlwaysOnDisplayDB`, and every change calls `ns.Refresh()`.
+- **`Minimap.lua`**: a self-contained button with no library dependencies. It is named `AlwaysOnDisplayMinimapButton`, so minimap-button collectors can find it. Its position is stored as an angle in `AlwaysOnDisplayDB.minimapAngle`. While you drag it, it follows the cursor using the minimap's effective scale. `AlwaysOnDisplay_OnAddonCompartmentClick` is the click handler for the AddOns-menu entry.
 
 ## Development & tests
 
@@ -115,8 +126,11 @@ The tests cover:
 - **Target**: no target, enemy percent versus party values, no resource, dead/ghost.
 - **Live updates**: energy ticks, shapeshifts, and filtering events by unit.
 - **Options**: settings registration and types, the dropdown choices, live changes from the panel, and `/aod` / `/aod reset`.
+- **Minimap button**: creation, default and saved positions, click, tooltip, dragging (including minimap scale), hiding and showing, `/aod minimap`, and the AddOns-menu entry.
 
-To add a test, write a `test("name", function() ... end)` block in `tests/test_core.lua` or `tests/test_options.lua`. `mock.new{layout=…, savedDB=…}` builds a fresh client, `mock.login(env)` loads the addon, `mock.fire(env, event, ...)` sends events, and `mock.visibleText(env, "playerHealth")` reads what's on a bar. A new test file must also be added to `SUITES` in `tests/run.lua`.
+The mock loads the Lua files in the order the `.toc` lists them, the same way the game does.
+
+To add a test, write a `test("name", function() ... end)` block in `tests/test_core.lua`, `tests/test_options.lua` or `tests/test_minimap.lua`. `mock.new{layout=…, savedDB=…}` builds a fresh client, `mock.login(env)` loads the addon, `mock.fire(env, event, ...)` sends events, and `mock.visibleText(env, "playerHealth")` reads what's on a bar. A new test file must also be added to `SUITES` in `tests/run.lua`.
 
 ## Releases
 

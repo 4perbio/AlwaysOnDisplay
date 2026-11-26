@@ -18,23 +18,26 @@ test("registers one setting per option, bound to the saved variables", function(
     local env = loggedIn()
     local n = 0
     for key, default in pairs(env.ns.defaults) do
-        local s = env.settings[key]
-        truthy(s, "setting for " .. key)
-        eq(s.variable, "AlwaysOnDisplay_" .. key)
-        truthy(s.tbl == AlwaysOnDisplayDB, key .. " bound to the DB")
-        eq(s.varType, type(default), key .. " type")
-        eq(s.default, default, key .. " default")
-        truthy(s.cb, key .. " has a change callback")
-        n = n + 1
+        if key ~= "minimapAngle" then  -- set by dragging, not in the panel
+            local s = env.settings[key]
+            truthy(s, "setting for " .. key)
+            eq(s.variable, "AlwaysOnDisplay_" .. key)
+            truthy(s.tbl == AlwaysOnDisplayDB, key .. " bound to the DB")
+            eq(s.varType, type(default), key .. " type")
+            eq(s.default, default, key .. " default")
+            truthy(s.cb, key .. " has a change callback")
+            n = n + 1
+        end
     end
-    eq(n, 6)
+    eq(n, 7)
+    falsy(env.settings.minimapAngle, "angle is not a panel setting")
 end)
 
 test("checkboxes for the boolean options, dropdown for format", function()
     local env = loggedIn()
     local kinds = {}
     for _, c in ipairs(env.controls) do kinds[c.setting.key] = c end
-    for _, key in ipairs({ "playerHealth", "playerPower", "targetHealth", "targetPower", "shortNumbers" }) do
+    for _, key in ipairs({ "playerHealth", "playerPower", "targetHealth", "targetPower", "shortNumbers", "minimapButton" }) do
         eq(kinds[key].kind, "checkbox", key)
         truthy(kinds[key].tooltip, key .. " tooltip")
     end

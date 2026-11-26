@@ -37,7 +37,16 @@ function ns.RegisterOptions()
     Settings.CreateCheckbox(category, Setting("shortNumbers", "Short numbers"),
         "Abbreviate large numbers (12.3k, 1.2m).")
 
+    local minimap = Setting("minimapButton", "Show minimap button")
+    minimap:SetValueChangedCallback(function() ns.UpdateMinimapButton() end)
+    Settings.CreateCheckbox(category, minimap,
+        "Show a button on the minimap that opens these settings. Drag it to move it.")
+
     Settings.RegisterAddOnCategory(category)
+end
+
+function ns.OpenOptions()
+    if category then Settings.OpenToCategory(category:GetID()) end
 end
 
 SLASH_ALWAYSONDISPLAY1 = "/aod"
@@ -46,8 +55,12 @@ SlashCmdList.ALWAYSONDISPLAY = function(msg)
     if msg == "reset" then
         for k, v in pairs(ns.defaults) do ns.db[k] = v end
         ns.Refresh()
+        if ns.UpdateMinimapButton then ns.UpdateMinimapButton() end
         print("|cff33ff99AlwaysOnDisplay|r: settings reset (reopen the options panel to see them).")
-    elseif category then
-        Settings.OpenToCategory(category:GetID())
+    elseif msg == "minimap" then
+        ns.db.minimapButton = not ns.db.minimapButton
+        ns.UpdateMinimapButton()
+    else
+        ns.OpenOptions()
     end
 end

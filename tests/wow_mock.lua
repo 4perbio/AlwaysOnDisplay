@@ -32,6 +32,25 @@ function Frame:SetFrameLevel(l) self.level = l end
 function Frame:GetFrameLevel() return self.level end
 function Frame:Show() self.shown = true end
 function Frame:Hide() self.shown = false end
+function Frame:SetSize(w, h) self.width, self.height = w, h end
+function Frame:GetWidth() return self.width or 0 end
+function Frame:SetFrameStrata(s) self.strata = s end
+function Frame:RegisterForClicks(...) self.clicks = { ... } end
+function Frame:RegisterForDrag(...) self.drag = { ... } end
+function Frame:SetHighlightTexture(t) self.highlight = t end
+function Frame:ClearAllPoints() self.point = nil end
+function Frame:GetCenter() return self.cx or 0, self.cy or 0 end
+function Frame:GetEffectiveScale() return self.scale or 1 end
+function Frame:GetScript(name) return self.scripts[name] end
+function Frame:CreateTexture(name, layer)
+    local tex = { layer = layer }
+    function tex:SetSize(w, h) self.width, self.height = w, h end
+    function tex:SetTexture(t) self.texture = t end
+    function tex:SetPoint(...) self.point = { ... } end
+    self.textures = self.textures or {}
+    table.insert(self.textures, tex)
+    return tex
+end
 function Frame:IsShown() return self.shown end
 function Frame:CreateFontString(name, layer, template)
     local fs = newFontString(self, layer, template)
@@ -45,8 +64,23 @@ end
 local GLOBALS_TO_RESET = {
     "PlayerFrameHealthBar", "PlayerFrameManaBar", "TargetFrameHealthBar", "TargetFrameManaBar",
     "PlayerFrame", "TargetFrame", "AlwaysOnDisplayDB", "SLASH_ALWAYSONDISPLAY1", "SlashCmdList",
-    "Settings", "CreateFrame",
+    "Settings", "CreateFrame", "Minimap", "GameTooltip", "GetCursorPosition",
+    "AlwaysOnDisplay_OnAddonCompartmentClick", "AlwaysOnDisplayMinimapButton",
 }
+
+-- Lua files in the order the .toc lists them, as the client loads them.
+function M.tocFiles()
+    local files = {}
+    for line in M.toc():gmatch("[^\r\n]+") do
+        if line:match("%.lua$") and not line:match("^#") then table.insert(files, line) end
+    end
+    return files
+end
+
+-- Raw text of the .toc file (READ_FILE is provided by tests/run.js).
+function M.toc()
+    return READ_FILE(ADDON_DIR .. ADDON_NAME .. ".toc")
+end
 
 -- opts.layout: "classic" (default) | "modern" | "fields" | "none"
 -- opts.savedDB: table restored as the SavedVariable before load
@@ -76,7 +110,27 @@ function M.new(opts)
     end
     env.newFrame = newFrame
 
-    _G.CreateFrame = function(_, _, parent) return newFrame(parent) end
+    _G.CreateFrame = function(frameType, name, parent)
+        local f = newFrame(parent)
+        f.frameType = frameType
+        if name then _G[name] = f end
+        return f
+    end
+
+    -- Minimap: 140 wide, centred at (1000, 700) on screen.
+    _G.Minimap = newFrame(nil)
+    Minimap.width, Minimap.cx, Minimap.cy = 140, 1000, 700
+    env.cursor = { x = 0, y = 0 }
+    _G.GetCursorPosition = function() return env.cursor.x, env.cursor.y end
+
+    env.tooltip = { lines = {} }
+    _G.GameTooltip = {
+        SetOwner = function(self, owner) env.tooltip.owner = owner; env.tooltip.lines = {} end,
+        SetText = function(self, t) table.insert(env.tooltip.lines, t) end,
+        AddLine = function(self, t) table.insert(env.tooltip.lines, t) end,
+        Show = function() env.tooltip.shown = true end,
+        Hide = function() env.tooltip.shown = false end,
+    }
 
     -- Bars, with Blizzard's own hover text strings.
     local function newBar(level)
@@ -186,7 +240,7 @@ function M.new(opts)
 
     -- Load the addon files the way the client does: (addonName, namespace).
     env.ns = {}
-    for _, file in ipairs({ "Core.lua", "Options.lua" }) do
+    for _, file in ipairs(M.tocFiles()) do
         local chunk = assert(loadfile(ADDON_DIR .. file))
         chunk(ADDON_NAME, env.ns)
     end
