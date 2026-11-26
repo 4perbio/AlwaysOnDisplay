@@ -7,13 +7,53 @@ local ADDON_NAME = "AlwaysOnDisplay"
 ---------------------------------------------------------------------------
 -- Frames and font strings
 ---------------------------------------------------------------------------
+---------------------------------------------------------------------------
+-- Secret values: like the client, any arithmetic, comparison, concatenation
+-- or length on them raises. tostring gives the real value so the tests can
+-- see what a FontString would render.
+---------------------------------------------------------------------------
+local SecretMT = {}
+local function refuse(what)
+    return function() error("attempt to " .. what .. " a secret value (mock)", 2) end
+end
+for _, mm in ipairs({ "__add", "__sub", "__mul", "__div", "__mod", "__pow", "__unm", "__idiv" }) do
+    SecretMT[mm] = refuse("perform arithmetic on")
+end
+SecretMT.__lt = refuse("compare")
+SecretMT.__le = refuse("compare")
+SecretMT.__eq = refuse("compare")
+SecretMT.__concat = refuse("concatenate")
+SecretMT.__len = refuse("get length of")
+SecretMT.__index = function() error("attempt to index a secret value (mock)", 2) end
+SecretMT.__tostring = function(s) return tostring(rawget(s, "v")) end
+
+function M.secret(v) return setmetatable({ v = v }, SecretMT) end
+function M.isSecret(v) return getmetatable(v) == SecretMT end
+local function unwrap(v)
+    if M.isSecret(v) then return rawget(v, "v") end
+    return v
+end
+M.unwrap = unwrap
+
+-- type() reports a secret's real type, as in the client.
+local rawType = type
+_G.type = function(v)
+    if M.isSecret(v) then return rawType(rawget(v, "v")) end
+    return rawType(v)
+end
+
+local rawFormat = string.format
+
 local FontString = {}
 FontString.__index = FontString
 
 local function newFontString(parent, layer, template)
     return setmetatable({ parent = parent, layer = layer, template = template, alpha = 1 }, FontString)
 end
-function FontString:SetText(t) self.text = t end
+function FontString:SetText(t)
+    self.secretText = M.isSecret(t)
+    self.text = t ~= nil and tostring(unwrap(t)) or nil
+end
 function FontString:GetText() return self.text end
 function FontString:SetPoint(...) self.point = { ... } end
 function FontString:SetAlpha(a) self.alpha = a end
@@ -66,6 +106,7 @@ local GLOBALS_TO_RESET = {
     "PlayerFrame", "TargetFrame", "AlwaysOnDisplayDB", "SLASH_ALWAYSONDISPLAY1", "SlashCmdList",
     "Settings", "CreateFrame", "Minimap", "GameTooltip", "GetCursorPosition",
     "AlwaysOnDisplay_OnAddonCompartmentClick", "AlwaysOnDisplayMinimapButton",
+    "issecretvalue", "UnitHealthPercent", "UnitPowerPercent", "CurveConstants", "AbbreviateLargeNumbers",
 }
 
 -- Lua files in the order the .toc lists them, as the client loads them.
@@ -235,6 +276,53 @@ function M.new(opts)
         RegisterAddOnCategory = function(category) env.registeredCategory = category end,
         OpenToCategory = function(id) table.insert(env.opened, id) end,
     }
+
+    -- Secret-value API, as on WoW Forever.
+    --   opts.secretFormat: "accept" (default) -> string.format takes secrets and returns a secret string
+    --                      "reject"           -> string.format raises on secrets
+    --   opts.percentAPI:   nil | "plain" | "secret"  (UnitHealthPercent / UnitPowerPercent)
+    --   opts.abbreviate:   true -> AbbreviateLargeNumbers exists and accepts secrets
+    _G.issecretvalue = function(v) return M.isSecret(v) end
+    string.format = function(fmt, ...)
+        local args, secret = { ... }, false
+        for i = 1, select("#", ...) do
+            if M.isSecret(args[i]) then secret = true; args[i] = rawget(args[i], "v") end
+        end
+        if secret and opts.secretFormat == "reject" then
+            error("bad argument to 'format' (secret values not allowed) (mock)", 2)
+        end
+        local s = rawFormat(fmt, table.unpack(args, 1, select("#", ...)))
+        if secret then return M.secret(s) end
+        return s
+    end
+    if opts.percentAPI then
+        _G.CurveConstants = { ScaleTo100 = "ScaleTo100" }
+        -- Like the client: without the ScaleTo100 curve the result is a 0-1 fraction
+        -- (seen in game as "3664 / 3664 (1%)" when the curve was passed in the wrong slot).
+        local function pct(cur, max, curve)
+            local p = unwrap(cur) / unwrap(max)
+            if curve == "ScaleTo100" then p = p * 100 end
+            if opts.percentAPI == "secret" then return M.secret(p) end
+            return p
+        end
+        _G.UnitHealthPercent = function(unit, usePredicted, curve)
+            assert(type(usePredicted) == "boolean", "UnitHealthPercent(unit, usePredicted, curve)")
+            return pct(u(unit).health, u(unit).maxHealth, curve)
+        end
+        _G.UnitPowerPercent = function(unit, powerType, usePredicted, curve)
+            assert(powerType == u(unit).powerType, "UnitPowerPercent queried with wrong power type")
+            assert(type(usePredicted) == "boolean", "UnitPowerPercent(unit, powerType, usePredicted, curve)")
+            return pct(u(unit).power, u(unit).maxPower, curve)
+        end
+    end
+    if opts.abbreviate then
+        _G.AbbreviateLargeNumbers = function(v)
+            local n = unwrap(v)
+            local s = n >= 1000 and rawFormat("%.1f K", n / 1000) or tostring(n)
+            if M.isSecret(v) then return M.secret(s) end
+            return s
+        end
+    end
 
     if opts.savedDB then _G.AlwaysOnDisplayDB = opts.savedDB end
 

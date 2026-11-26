@@ -84,15 +84,33 @@ end)
 ---------------------------------------------------------------------------
 -- Formatting
 ---------------------------------------------------------------------------
-test("default format shows value, max and percent", function()
+test("default format shows value and max, without percent", function()
     local env = loggedIn()
-    eq(mock.visibleText(env, "playerHealth"), "1234 / 2000 (62%)")
-    eq(mock.visibleText(env, "playerPower"), "500 / 1000 (50%)")
+    eq(AlwaysOnDisplayDB.format, "VALUE")
+    eq(mock.visibleText(env, "playerHealth"), "1234 / 2000")
+    eq(mock.visibleText(env, "playerPower"), "500 / 1000")
 end)
 
-test("VALUE format", function()
-    local env = loggedIn({ savedDB = { format = "VALUE" } })
+test("BOTH format adds the percent", function()
+    local env = loggedIn({ savedDB = { format = "BOTH", dbVersion = 2 } })
+    eq(mock.visibleText(env, "playerHealth"), "1234 / 2000 (62%)")
+end)
+
+test("old saved 'BOTH' (written as the default up to v1.0.3) moves to the new default once", function()
+    local env = loggedIn({ savedDB = { format = "BOTH", playerHealth = true } })
+    eq(AlwaysOnDisplayDB.format, "VALUE")
+    eq(AlwaysOnDisplayDB.dbVersion, 2)
     eq(mock.visibleText(env, "playerHealth"), "1234 / 2000")
+end)
+
+test("choosing 'BOTH' again after the migration is kept", function()
+    loggedIn({ savedDB = { format = "BOTH", dbVersion = 2 } })
+    eq(AlwaysOnDisplayDB.format, "BOTH")
+end)
+
+test("old saved non-default formats are kept", function()
+    loggedIn({ savedDB = { format = "PERCENT" } })
+    eq(AlwaysOnDisplayDB.format, "PERCENT")
 end)
 
 test("PERCENT format", function()
@@ -105,22 +123,22 @@ test("short numbers abbreviate from 10k and drop trailing .0", function()
     local p = env.units.player
     p.health, p.maxHealth = 12345, 20000
     mock.fire(env, "UNIT_HEALTH", "player")
-    eq(mock.visibleText(env, "playerHealth"), "12.3k / 20k (62%)")
+    eq(mock.visibleText(env, "playerHealth"), "12.3k / 20k")
 
     p.health, p.maxHealth = 1500000, 2000000
     mock.fire(env, "UNIT_MAXHEALTH", "player")
-    eq(mock.visibleText(env, "playerHealth"), "1.5m / 2m (75%)")
+    eq(mock.visibleText(env, "playerHealth"), "1.5m / 2m")
 
     p.health, p.maxHealth = 9999, 9999
     mock.fire(env, "UNIT_HEALTH", "player")
-    eq(mock.visibleText(env, "playerHealth"), "9999 / 9999 (100%)")
+    eq(mock.visibleText(env, "playerHealth"), "9999 / 9999")
 end)
 
 test("short numbers off shows full values", function()
     local env = loggedIn({ savedDB = { shortNumbers = false } })
     env.units.player.health, env.units.player.maxHealth = 12345, 20000
     mock.fire(env, "UNIT_HEALTH", "player")
-    eq(mock.visibleText(env, "playerHealth"), "12345 / 20000 (62%)")
+    eq(mock.visibleText(env, "playerHealth"), "12345 / 20000")
 end)
 
 test("rounds the percentage to the nearest whole number", function()
@@ -141,8 +159,8 @@ test("target text is hidden with no target and shown once targeted", function()
     falsy(mock.visibleText(env, "targetHealth"))
     falsy(mock.visibleText(env, "targetPower"))
     withTarget(env, { health = 800, maxHealth = 1000, powerType = 0, power = 200, maxPower = 400, inParty = true })
-    eq(mock.visibleText(env, "targetHealth"), "800 / 1000 (80%)")
-    eq(mock.visibleText(env, "targetPower"), "200 / 400 (50%)")
+    eq(mock.visibleText(env, "targetHealth"), "800 / 1000")
+    eq(mock.visibleText(env, "targetPower"), "200 / 400")
     withTarget(env, nil)
     falsy(mock.visibleText(env, "targetHealth"))
     falsy(mock.visibleText(env, "targetPower"))
@@ -157,14 +175,14 @@ end)
 test("a party member with exactly 100 max health still shows values", function()
     local env = loggedIn()
     withTarget(env, { health = 45, maxHealth = 100, powerType = 0, power = 10, maxPower = 50, inParty = true })
-    eq(mock.visibleText(env, "targetHealth"), "45 / 100 (45%)")
+    eq(mock.visibleText(env, "targetHealth"), "45 / 100")
 end)
 
 test("targeting yourself with 100 max health shows values", function()
     local env = loggedIn()
     env.units.player.health, env.units.player.maxHealth = 70, 100
     withTarget(env, env.units.player)
-    eq(mock.visibleText(env, "targetHealth"), "70 / 100 (70%)")
+    eq(mock.visibleText(env, "targetHealth"), "70 / 100")
 end)
 
 test("target with no resource hides the resource text", function()
@@ -195,19 +213,19 @@ test("UNIT_POWER_FREQUENT updates energy live", function()
     local p = env.units.player
     p.powerType, p.power, p.maxPower = 3, 40, 100
     mock.fire(env, "UNIT_DISPLAYPOWER", "player")
-    eq(mock.visibleText(env, "playerPower"), "40 / 100 (40%)")
+    eq(mock.visibleText(env, "playerPower"), "40 / 100")
     p.power = 60
     mock.fire(env, "UNIT_POWER_FREQUENT", "player", "ENERGY")
-    eq(mock.visibleText(env, "playerPower"), "60 / 100 (60%)")
+    eq(mock.visibleText(env, "playerPower"), "60 / 100")
 end)
 
 test("shapeshift (UNIT_DISPLAYPOWER) switches mana to rage", function()
     local env = loggedIn()
-    eq(mock.visibleText(env, "playerPower"), "500 / 1000 (50%)")
+    eq(mock.visibleText(env, "playerPower"), "500 / 1000")
     local p = env.units.player
     p.powerType, p.power, p.maxPower = 1, 15, 100
     mock.fire(env, "UNIT_DISPLAYPOWER", "player")
-    eq(mock.visibleText(env, "playerPower"), "15 / 100 (15%)")
+    eq(mock.visibleText(env, "playerPower"), "15 / 100")
 end)
 
 test("a player event only refreshes the player frame", function()
@@ -224,7 +242,7 @@ test("events for other units are ignored", function()
     local env = loggedIn()
     env.units.player.health = 1
     mock.fire(env, "UNIT_HEALTH", "party1")
-    eq(mock.visibleText(env, "playerHealth"), "1234 / 2000 (62%)")
+    eq(mock.visibleText(env, "playerHealth"), "1234 / 2000")
 end)
 
 ---------------------------------------------------------------------------
@@ -253,6 +271,6 @@ test("ns.Refresh() with no unit updates everything", function()
     env.units.player.health = 1000
     env.units.target.health = 20
     env.ns.Refresh()
-    eq(mock.visibleText(env, "playerHealth"), "1000 / 2000 (50%)")
+    eq(mock.visibleText(env, "playerHealth"), "1000 / 2000")
     eq(mock.visibleText(env, "targetHealth"), "20%")
 end)

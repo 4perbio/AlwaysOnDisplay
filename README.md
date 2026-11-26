@@ -6,8 +6,8 @@ A World of Warcraft **Forever** addon that always shows the numbers for your hea
 
 ```
  ┌──────────────────────────────┐
- │  1234 / 2000 (62%)           │  ← health
- │  500 / 1000 (50%)            │  ← mana / energy / rage
+ │  1234 / 2000                 │  ← health
+ │  500 / 1000                  │  ← mana / energy / rage
  └──────────────────────────────┘
 ```
 
@@ -16,7 +16,7 @@ A World of Warcraft **Forever** addon that always shows the numbers for your hea
 - Always-visible text on four bars: **player health**, **player resource**, **target health** and **target resource**. Each one can be turned on or off separately.
 - Works for every resource type, and switches automatically when a druid changes form.
 - Energy and rage update with every tick.
-- Three text formats: `1234 / 2000 (62%)`, `1234 / 2000`, or `62%`.
+- Three text formats: `1234 / 2000` (default), `1234 / 2000 (62%)`, or `62%`.
 - Optional short numbers: `12.3k`, `1.5m`.
 - Enemy targets show `45%`. Forever's Classic-style servers only give a percentage for enemy health, not real numbers. Party and raid members, and you, show full values.
 - Dead and ghost units show `Dead` or `Ghost`. The resource text is hidden for targets with no resource.
@@ -62,7 +62,7 @@ Drag the minimap button to move it along the minimap edge. Its position is saved
 | Player resource | on                  | Mana / energy / rage text on your own frame               |
 | Target health   | on                  | Health text on the target frame                           |
 | Target resource | on                  | Mana / energy / rage text on the target frame             |
-| Text format     | `1234 / 2000 (62%)` | Value and percent, value only, or percent only            |
+| Text format     | `1234 / 2000`       | Value only, value and percent, or percent only            |
 | Short numbers   | on                  | Shortens numbers from 10,000 up (`12.3k`, `1.5m`)         |
 | Show minimap button | on              | The settings button on the minimap edge                   |
 
@@ -74,6 +74,7 @@ Changes apply immediately and are saved account-wide in `WTF\Account\<account>\S
 |--------------|---------------------------------|
 | `/aod`       | Open the options panel          |
 | `/aod minimap` | Show or hide the minimap button |
+| `/aod debug` | Print what the client supports and what each bar is doing (useful for bug reports) |
 | `/aod reset` | Restore all options to defaults, including the minimap button's position |
 
 ## Troubleshooting
@@ -81,6 +82,12 @@ Changes apply immediately and are saved account-wide in `WTF\Account\<account>\S
 **"AlwaysOnDisplay: could not find some unit frame bars" in chat.**
 The addon looks for the default bars under several known names:
 `PlayerFrameHealthBar` / `PlayerFrameManaBar` / `TargetFrameHealthBar` / `TargetFrameManaBar`, the modern nested `PlayerFrame.PlayerFrameContent…` paths, and `PlayerFrame.healthbar` / `.manabar`. If a game update renames them, or another unit frame addon replaces them, they won't be found. Hover the bar, type `/fstack` to see its frame name, and add it to `BAR_CANDIDATES` in `AlwaysOnDisplay/Core.lua`.
+
+**"could not show … text, using the game's own text instead" in chat.**
+Something went wrong while drawing the text on that bar, so the addon gave the bar back to the game's own text instead of leaving it blank. Type `/aod debug` and include its output when you report the problem.
+
+**Text shows only `1234 / 2000` without a percent, or only a bare number.**
+WoW Forever protects health and power as *secret values* (see "How it works"). If the client offers no way to turn them into a percent or formatted text, the addon shows what it is allowed to. `/aod debug` shows which of these the client supports.
 
 **Text shows twice.**
 Another addon, or the game's *Status Text* interface option, is drawing text on the bar too. Turn off one of them.
@@ -105,6 +112,11 @@ AlwaysOnDisplay/
   - `BAR_CANDIDATES` holds the list of places to look for each bar.
   - `Setup` creates an overlay frame 5 levels above each bar, holding one centered `TextStatusBarText` font string.
   - `UpdateDisplay` reads `UnitHealth` and `UnitPower(unit, UnitPowerType(unit))`, then formats the result.
+  - **Secret values.** WoW Forever runs on the modern engine, where `UnitHealth`, `UnitPower` and sometimes their max return *secret* numbers. Addon code may not do math, comparisons or `and`/`or`/`==` tests on them, but it may pass them to `FontString:SetText`. The rules differ from Retail, and Retail's documentation contradicts itself, so the code never assumes:
+    - Readable values are formatted normally.
+    - For secret values, the text is built only with calls run inside `pcall`: `string.format("%s / %s")`, `AbbreviateLargeNumbers`, and `UnitHealthPercent` / `UnitPowerPercent` with `CurveConstants.ScaleTo100`. Each one falls back if the client refuses it, ending with the bare current value.
+    - Checks for missing values use `type()`. A secret max power counts as "has this resource".
+    - Every bar update runs inside `pcall`. If it fails, our text is hidden and Blizzard's text is restored, so a bar is never left blank. The error is kept for `/aod debug`.
   - The events listened to are `PLAYER_LOGIN`, `PLAYER_ENTERING_WORLD`, `PLAYER_TARGET_CHANGED`, plus `UNIT_HEALTH`, `UNIT_MAXHEALTH`, `UNIT_POWER_UPDATE`, `UNIT_POWER_FREQUENT`, `UNIT_MAXPOWER`, `UNIT_DISPLAYPOWER` and `UNIT_FLAGS`. The unit events only fire for `player` and `target`.
 - **`Options.lua`**: builds the panel with the modern `Settings` API (`RegisterVerticalLayoutCategory`, `RegisterAddOnSetting`, `CreateCheckbox`, `CreateDropdown`). Each setting is bound directly to `AlwaysOnDisplayDB`, and every change calls `ns.Refresh()`.
 - **`Minimap.lua`**: a self-contained button with no library dependencies. It is named `AlwaysOnDisplayMinimapButton`, so minimap-button collectors can find it. Its position is stored as an angle in `AlwaysOnDisplayDB.minimapAngle`. While you drag it, it follows the cursor using the minimap's effective scale. `AlwaysOnDisplay_OnAddonCompartmentClick` is the click handler for the AddOns-menu entry.
@@ -126,6 +138,7 @@ The tests cover:
 - **Target**: no target, enemy percent versus party values, no resource, dead/ghost.
 - **Live updates**: energy ticks, shapeshifts, and filtering events by unit.
 - **Options**: settings registration and types, the dropdown choices, live changes from the panel, and `/aod` / `/aod reset`.
+- **Secret values**: the mock's secret numbers raise on math, comparisons and concatenation, like the client. The tests run every scenario the docs disagree on: percent API missing, plain or secret; `string.format` accepting or refusing secrets; with and without `AbbreviateLargeNumbers`. They also cover secret target values, the fallback to Blizzard's text, and `/aod debug`.
 - **Minimap button**: creation, default and saved positions, click, tooltip, dragging (including minimap scale), hiding and showing, `/aod minimap`, and the AddOns-menu entry.
 
 The mock loads the Lua files in the order the `.toc` lists them, the same way the game does.

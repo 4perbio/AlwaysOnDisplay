@@ -5,7 +5,7 @@ ns.defaults = {
     playerPower  = true,
     targetHealth = true,
     targetPower  = true,
-    format       = "BOTH",   -- "VALUE" | "PERCENT" | "BOTH"
+    format       = "VALUE",  -- "VALUE" | "PERCENT" | "BOTH"
     shortNumbers = true,
     minimapButton = true,
     minimapAngle = 225,      -- not shown in the panel; set by dragging the button
@@ -65,14 +65,97 @@ local function ShortNumber(n)
     return tostring(n)
 end
 
-local function FormatValue(cur, max, percentOnly)
-    local pct = math.floor(cur / max * 100 + 0.5)
-    if percentOnly or ns.db.format == "PERCENT" then
-        return pct .. "%"
-    elseif ns.db.format == "VALUE" then
-        return ShortNumber(cur) .. " / " .. ShortNumber(max)
+---------------------------------------------------------------------------
+-- Secret values
+--
+-- On WoW Forever, UnitHealth/UnitPower (and sometimes their max) can return
+-- "secret" numbers. Addon code may not do arithmetic, comparisons or boolean
+-- tests on them, but may hand them to FontString:SetText. So: never touch a
+-- secret directly, try the formatting calls that are documented to accept
+-- secrets inside pcall, and fall back to showing the raw current value.
+---------------------------------------------------------------------------
+local function IsSecret(v)
+    return issecretvalue ~= nil and issecretvalue(v) == true
+end
+
+-- nil-check that is safe on secrets (type() is allowed, == / and / or are not).
+local function Has(v)
+    return type(v) ~= "nil"
+end
+
+-- string.format that never raises; nil when the client refuses the arguments.
+local function TryFormat(fmt, ...)
+    local ok, s = pcall(string.format, fmt, ...)
+    if ok then return s end
+end
+
+-- Formats with plain string.format when nothing is secret, otherwise via TryFormat.
+local function Join(fmt, ...)
+    for i = 1, select("#", ...) do
+        if IsSecret((select(i, ...))) then return TryFormat(fmt, ...) end
     end
-    return ShortNumber(cur) .. " / " .. ShortNumber(max) .. " (" .. pct .. "%)"
+    return string.format(fmt, ...)
+end
+
+local function Short(v)
+    if not IsSecret(v) then return ShortNumber(v) end
+    if ns.db.shortNumbers and AbbreviateLargeNumbers then
+        local ok, s = pcall(AbbreviateLargeNumbers, v)
+        if ok and Has(s) then return s end
+    end
+    return v
+end
+
+-- Percentage as a plain whole number, a secret number, or nil if unavailable.
+local function Percent(d, cur, max)
+    if not IsSecret(cur) and not IsSecret(max) then
+        return math.floor(cur / max * 100 + 0.5)
+    end
+    local scale = CurveConstants and CurveConstants.ScaleTo100
+    local ok, pct
+    if d.kind == "health" and UnitHealthPercent and scale then
+        ok, pct = pcall(UnitHealthPercent, d.unit, false, scale)
+    elseif d.kind == "power" and UnitPowerPercent and scale then
+        -- (unit, powerType, usePredicted, curve): without usePredicted the curve is
+        -- ignored and a 0-1 fraction comes back, which showed as "(1%)" at full mana.
+        ok, pct = pcall(UnitPowerPercent, d.unit, UnitPowerType(d.unit), false, scale)
+    end
+    if not ok or type(pct) ~= "number" then return nil end
+    if IsSecret(pct) then return pct end
+    return math.floor(pct + 0.5)
+end
+
+local function PercentText(pct)
+    if not Has(pct) then return nil end
+    if IsSecret(pct) then return TryFormat("%.0f%%", pct) end
+    return pct .. "%"
+end
+
+-- Returns the text to show (possibly a secret string) and how it was built.
+local function BuildText(d, cur, max, percentOnly)
+    local secret = IsSecret(cur) or IsSecret(max)
+    local how = secret and "secret" or "plain"
+    local format = percentOnly and "PERCENT" or ns.db.format
+
+    local valueText, pctText
+    if format ~= "PERCENT" then valueText = Join("%s / %s", Short(cur), Short(max)) end
+    if format ~= "VALUE" then pctText = PercentText(Percent(d, cur, max)) end
+
+    local text
+    if Has(valueText) and Has(pctText) then
+        text = Join("%s (%s)", valueText, pctText)
+        if not Has(text) then text = valueText end
+    elseif Has(valueText) then
+        text = valueText
+    else
+        text = pctText
+    end
+    if not Has(text) then
+        -- Nothing could be formatted: the bare current value is always allowed.
+        return cur, how .. ", raw value only"
+    end
+    if format ~= "VALUE" and not Has(pctText) then how = how .. ", no percent available" end
+    return text, how
 end
 
 -- Blizzard's own hover text on a bar; muted while ours is shown so they don't overlap.
@@ -97,19 +180,18 @@ local function Setup(d)
     return true
 end
 
+-- Shows our text on a bar, or hides it; returns a short status for /aod debug.
 local function UpdateDisplay(d)
-    if not d.text then return end
     local unit = d.unit
     if not ns.db[d.key] then
         d.overlay:Hide()
         SetBlizzardTextAlpha(d.bar, 1)
-        return
+        return "disabled"
     end
-    SetBlizzardTextAlpha(d.bar, 0)
 
     if not UnitExists(unit) then
         d.overlay:Hide()
-        return
+        return "no unit"
     end
 
     local cur, max
@@ -117,7 +199,8 @@ local function UpdateDisplay(d)
         if UnitIsDeadOrGhost(unit) then
             d.text:SetText(UnitIsGhost(unit) and "Ghost" or "Dead")
             d.overlay:Show()
-            return
+            SetBlizzardTextAlpha(d.bar, 0)
+            return "dead"
         end
         cur, max = UnitHealth(unit), UnitHealthMax(unit)
     else
@@ -125,23 +208,62 @@ local function UpdateDisplay(d)
         cur, max = UnitPower(unit, powerType), UnitPowerMax(unit, powerType)
     end
 
-    if not max or max <= 0 then
+    -- A secret max means the unit has this resource; only a readable max can be checked.
+    if not Has(max) or (not IsSecret(max) and max <= 0) then
         d.overlay:Hide()
-        return
+        return "no resource"
     end
 
-    -- Classic servers report enemy health as a 0-100 percentage.
-    local percentOnly = d.kind == "health" and max == 100 and unit ~= "player"
+    -- Classic-style servers report enemy health as a 0-100 percentage.
+    local percentOnly = d.kind == "health" and not IsSecret(max) and max == 100
         and not UnitIsUnit(unit, "player") and not UnitPlayerOrPetInParty(unit)
         and not UnitPlayerOrPetInRaid(unit)
 
-    d.text:SetText(FormatValue(cur, max, percentOnly))
+    local text, how = BuildText(d, cur, max, percentOnly)
+    d.text:SetText(text)
     d.overlay:Show()
+    SetBlizzardTextAlpha(d.bar, 0)
+    return "shown (" .. how .. ")"
 end
 
 function ns.Refresh(unit)
     for _, d in ipairs(ns.displays) do
-        if not unit or d.unit == unit then UpdateDisplay(d) end
+        if d.text and (not unit or d.unit == unit) then
+            local ok, status = pcall(UpdateDisplay, d)
+            if ok then
+                d.status, d.lastOK = status, true
+            else
+                -- Never leave the bar blank: give it back to Blizzard's text.
+                d.overlay:Hide()
+                SetBlizzardTextAlpha(d.bar, 1)
+                d.status, d.lastOK = "error: " .. tostring(status), false
+                if not d.reported then
+                    d.reported = true
+                    print("|cff33ff99AlwaysOnDisplay|r: could not show " .. d.key
+                        .. " text, using the game's own text instead. Type /aod debug for details.")
+                end
+            end
+        end
+    end
+end
+
+-- /aod debug: what this client supports and what each bar is doing.
+function ns.Debug()
+    local p = function(s) print("|cff33ff99AOD|r " .. s) end
+    p("issecretvalue: " .. tostring(issecretvalue ~= nil)
+        .. ", UnitHealthPercent: " .. tostring(UnitHealthPercent ~= nil)
+        .. ", UnitPowerPercent: " .. tostring(UnitPowerPercent ~= nil)
+        .. ", CurveConstants.ScaleTo100: " .. tostring(CurveConstants ~= nil and CurveConstants.ScaleTo100 ~= nil)
+        .. ", AbbreviateLargeNumbers: " .. tostring(AbbreviateLargeNumbers ~= nil))
+    ns.Refresh()
+    for _, d in ipairs(ns.displays) do
+        local secrets = ""
+        if d.bar and UnitExists(d.unit) then
+            local okC, cur = pcall(d.kind == "health" and UnitHealth or function(u) return UnitPower(u, UnitPowerType(u)) end, d.unit)
+            local okM, max = pcall(d.kind == "health" and UnitHealthMax or function(u) return UnitPowerMax(u, UnitPowerType(u)) end, d.unit)
+            secrets = " | cur secret: " .. tostring(okC and IsSecret(cur)) .. ", max secret: " .. tostring(okM and IsSecret(max))
+        end
+        p(d.key .. ": " .. (d.bar and "bar found" or "BAR NOT FOUND") .. " | " .. tostring(d.status or "not updated") .. secrets)
     end
 end
 
@@ -175,6 +297,10 @@ f:SetScript("OnEvent", function(_, event, arg1)
         if arg1 ~= addonName then return end
         AlwaysOnDisplayDB = AlwaysOnDisplayDB or {}
         ns.db = AlwaysOnDisplayDB
+        -- Up to v1.0.3 every default was written into the saved table, so "BOTH"
+        -- there is almost always the old default, not a choice: move it to the new one.
+        if ns.db.dbVersion == nil and ns.db.format == "BOTH" then ns.db.format = "VALUE" end
+        ns.db.dbVersion = 2
         for k, v in pairs(ns.defaults) do
             if ns.db[k] == nil then ns.db[k] = v end
         end

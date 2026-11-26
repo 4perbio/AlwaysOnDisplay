@@ -37,7 +37,7 @@ function T.falsy(v, msg)
     if v then error((msg or "expected a falsy value") .. " (got " .. show(v) .. ")", 2) end
 end
 
-local SUITES = { "test_core", "test_options", "test_minimap" }
+local SUITES = { "test_core", "test_options", "test_minimap", "test_secrets" }
 
 for _, suite in ipairs(SUITES) do
     realPrint(suite)

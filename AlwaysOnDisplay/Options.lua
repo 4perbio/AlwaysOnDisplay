@@ -25,8 +25,8 @@ function ns.RegisterOptions()
 
     local function FormatOptions()
         local container = Settings.CreateControlTextContainer()
-        container:Add("BOTH", "1234 / 2000 (62%)")
         container:Add("VALUE", "1234 / 2000")
+        container:Add("BOTH", "1234 / 2000 (62%)")
         container:Add("PERCENT", "62%")
         return container:GetData()
     end
@@ -57,6 +57,8 @@ SlashCmdList.ALWAYSONDISPLAY = function(msg)
         ns.Refresh()
         if ns.UpdateMinimapButton then ns.UpdateMinimapButton() end
         print("|cff33ff99AlwaysOnDisplay|r: settings reset (reopen the options panel to see them).")
+    elseif msg == "debug" then
+        ns.Debug()
     elseif msg == "minimap" then
         ns.db.minimapButton = not ns.db.minimapButton
         ns.UpdateMinimapButton()
