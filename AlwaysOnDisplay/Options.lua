@@ -26,6 +26,7 @@ function ns.RegisterOptions()
     local function FormatOptions()
         local container = Settings.CreateControlTextContainer()
         container:Add("VALUE", "1234 / 2000")
+        container:Add("CURRENT", "1234")
         container:Add("BOTH", "1234 / 2000 (62%)")
         container:Add("PERCENT", "62%")
         return container:GetData()
@@ -36,6 +37,9 @@ function ns.RegisterOptions()
 
     Settings.CreateCheckbox(category, Setting("shortNumbers", "Short numbers"),
         "Abbreviate large numbers (12.3k, 1.2m).")
+
+    Settings.CreateCheckbox(category, Setting("showShield", "Show shield amount"),
+        "Show absorb shields next to the current health, e.g. 1234 +300 / 2000.")
 
     local minimap = Setting("minimapButton", "Show minimap button")
     minimap:SetValueChangedCallback(function() ns.UpdateMinimapButton() end)

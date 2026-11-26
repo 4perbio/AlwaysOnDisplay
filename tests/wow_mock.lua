@@ -107,6 +107,7 @@ local GLOBALS_TO_RESET = {
     "Settings", "CreateFrame", "Minimap", "GameTooltip", "GetCursorPosition",
     "AlwaysOnDisplay_OnAddonCompartmentClick", "AlwaysOnDisplayMinimapButton",
     "issecretvalue", "UnitHealthPercent", "UnitPowerPercent", "CurveConstants", "AbbreviateLargeNumbers",
+    "UnitGetTotalAbsorbs", "C_StringUtil",
 }
 
 -- Lua files in the order the .toc lists them, as the client loads them.
@@ -232,6 +233,10 @@ function M.new(opts)
     end
     _G.UnitPlayerOrPetInParty = function(unit) return u(unit).inParty or false end
     _G.UnitPlayerOrPetInRaid = function(unit) return u(unit).inRaid or false end
+    -- opts.noAbsorbAPI: client without UnitGetTotalAbsorbs.
+    if not opts.noAbsorbAPI then
+        _G.UnitGetTotalAbsorbs = function(unit) return u(unit).absorbs or 0 end
+    end
 
     _G.print = function(...)
         local parts = {}
@@ -294,6 +299,20 @@ function M.new(opts)
         local s = rawFormat(fmt, table.unpack(args, 1, select("#", ...)))
         if secret then return M.secret(s) end
         return s
+    end
+    --   opts.stringUtil:   true -> C_StringUtil.TruncateWhenZero / WrapString exist and accept secrets
+    if opts.stringUtil then
+        local function keep(v, s) if M.isSecret(v) then return M.secret(s) end return s end
+        _G.C_StringUtil = {
+            TruncateWhenZero = function(n)
+                local raw = M.isSecret(n) and rawget(n, "v") or n
+                return keep(n, raw == 0 and "" or tostring(raw))
+            end,
+            WrapString = function(s, prefix, suffix)
+                local raw = M.isSecret(s) and rawget(s, "v") or s
+                return keep(s, raw == "" and "" or (prefix .. raw .. suffix))
+            end,
+        }
     end
     if opts.percentAPI then
         _G.CurveConstants = { ScaleTo100 = "ScaleTo100" }

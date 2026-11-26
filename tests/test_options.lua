@@ -29,7 +29,7 @@ test("registers one setting per option, bound to the saved variables", function(
             n = n + 1
         end
     end
-    eq(n, 7)
+    eq(n, 8)
     falsy(env.settings.minimapAngle, "angle is not a panel setting")
 end)
 
@@ -37,16 +37,17 @@ test("checkboxes for the boolean options, dropdown for format", function()
     local env = loggedIn()
     local kinds = {}
     for _, c in ipairs(env.controls) do kinds[c.setting.key] = c end
-    for _, key in ipairs({ "playerHealth", "playerPower", "targetHealth", "targetPower", "shortNumbers", "minimapButton" }) do
+    for _, key in ipairs({ "playerHealth", "playerPower", "targetHealth", "targetPower", "shortNumbers", "minimapButton", "showShield" }) do
         eq(kinds[key].kind, "checkbox", key)
         truthy(kinds[key].tooltip, key .. " tooltip")
     end
     local dd = kinds.format
     eq(dd.kind, "dropdown")
-    eq(#dd.options, 3)
+    eq(#dd.options, 4)
     local values = {}
     for _, o in ipairs(dd.options) do values[o.value] = o.label end
-    truthy(values.BOTH and values.VALUE and values.PERCENT, "all three formats offered")
+    truthy(values.BOTH and values.VALUE and values.CURRENT and values.PERCENT, "all four formats offered")
+    eq(dd.options[1].value, "VALUE", "default listed first")
 end)
 
 test("unchecking a setting hides its text immediately", function()

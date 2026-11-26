@@ -5,8 +5,9 @@ ns.defaults = {
     playerPower  = true,
     targetHealth = true,
     targetPower  = true,
-    format       = "VALUE",  -- "VALUE" | "PERCENT" | "BOTH"
+    format       = "VALUE",  -- "VALUE" | "CURRENT" | "PERCENT" | "BOTH"
     shortNumbers = true,
+    showShield   = true,     -- absorb amount next to current health
     minimapButton = true,
     minimapAngle = 225,      -- not shown in the panel; set by dragging the button
 }
@@ -131,15 +132,50 @@ local function PercentText(pct)
     return pct .. "%"
 end
 
+local SHIELD_COLOR = "|cff8fd8ff%s|r"
+
+-- "+300" for the unit's absorb shield, or nil when there is none / it can't be shown.
+-- A readable 0 is hidden. A secret amount can't be compared with 0, so it is only
+-- shown through the client's zero-aware string helpers; without them it is left out
+-- rather than risk a permanent "+0".
+local function ShieldText(unit)
+    if not ns.db.showShield or not UnitGetTotalAbsorbs then return nil end
+    local ok, amount = pcall(UnitGetTotalAbsorbs, unit)
+    if not ok or type(amount) ~= "number" then return nil end
+    if not IsSecret(amount) then
+        if amount <= 0 then return nil end
+        return string.format(SHIELD_COLOR, "+" .. ShortNumber(amount))
+    end
+    local su = C_StringUtil
+    if not (su and su.TruncateWhenZero and su.WrapString) then return nil end
+    local okT, digits = pcall(su.TruncateWhenZero, amount)
+    if not okT or not Has(digits) then return nil end
+    local okW, wrapped = pcall(su.WrapString, digits, "+", "")   -- "" stays "" when zero
+    if not okW or not Has(wrapped) then return nil end
+    return TryFormat(SHIELD_COLOR, wrapped)
+end
+
 -- Returns the text to show (possibly a secret string) and how it was built.
 local function BuildText(d, cur, max, percentOnly)
     local secret = IsSecret(cur) or IsSecret(max)
     local how = secret and "secret" or "plain"
     local format = percentOnly and "PERCENT" or ns.db.format
+    local wantsPercent = format == "PERCENT" or format == "BOTH"
+
+    local shield = d.kind == "health" and ShieldText(d.unit) or nil
+    local curText = Short(cur)
+    if Has(shield) then curText = Join("%s %s", curText, shield) or curText end
 
     local valueText, pctText
-    if format ~= "PERCENT" then valueText = Join("%s / %s", Short(cur), Short(max)) end
-    if format ~= "VALUE" then pctText = PercentText(Percent(d, cur, max)) end
+    if format == "CURRENT" then
+        valueText = curText
+    elseif format ~= "PERCENT" then
+        valueText = Join("%s / %s", curText, Short(max))
+    end
+    if wantsPercent then pctText = PercentText(Percent(d, cur, max)) end
+    if format == "PERCENT" and Has(pctText) and Has(shield) then
+        pctText = Join("%s %s", pctText, shield) or pctText
+    end
 
     local text
     if Has(valueText) and Has(pctText) then
@@ -154,7 +190,7 @@ local function BuildText(d, cur, max, percentOnly)
         -- Nothing could be formatted: the bare current value is always allowed.
         return cur, how .. ", raw value only"
     end
-    if format ~= "VALUE" and not Has(pctText) then how = how .. ", no percent available" end
+    if wantsPercent and not Has(pctText) then how = how .. ", no percent available" end
     return text, how
 end
 
@@ -254,7 +290,10 @@ function ns.Debug()
         .. ", UnitHealthPercent: " .. tostring(UnitHealthPercent ~= nil)
         .. ", UnitPowerPercent: " .. tostring(UnitPowerPercent ~= nil)
         .. ", CurveConstants.ScaleTo100: " .. tostring(CurveConstants ~= nil and CurveConstants.ScaleTo100 ~= nil)
-        .. ", AbbreviateLargeNumbers: " .. tostring(AbbreviateLargeNumbers ~= nil))
+        .. ", AbbreviateLargeNumbers: " .. tostring(AbbreviateLargeNumbers ~= nil)
+        .. ", UnitGetTotalAbsorbs: " .. tostring(UnitGetTotalAbsorbs ~= nil)
+        .. ", C_StringUtil.TruncateWhenZero/WrapString: "
+        .. tostring(C_StringUtil ~= nil and C_StringUtil.TruncateWhenZero ~= nil and C_StringUtil.WrapString ~= nil))
     ns.Refresh()
     for _, d in ipairs(ns.displays) do
         local secrets = ""
@@ -291,6 +330,8 @@ f:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player", "target")
 f:RegisterUnitEvent("UNIT_MAXPOWER", "player", "target")
 f:RegisterUnitEvent("UNIT_DISPLAYPOWER", "player", "target")
 f:RegisterUnitEvent("UNIT_FLAGS", "player", "target")
+-- Shield changes; guarded in case this client doesn't have the event.
+pcall(f.RegisterUnitEvent, f, "UNIT_ABSORB_AMOUNT_CHANGED", "player", "target")
 
 f:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then

@@ -16,7 +16,8 @@ A World of Warcraft **Forever** addon that always shows the numbers for your hea
 - Always-visible text on four bars: **player health**, **player resource**, **target health** and **target resource**. Each one can be turned on or off separately.
 - Works for every resource type, and switches automatically when a druid changes form.
 - Energy and rage update with every tick.
-- Three text formats: `1234 / 2000` (default), `1234 / 2000 (62%)`, or `62%`.
+- Four text formats: `1234 / 2000` (default), `1234` (current only), `1234 / 2000 (62%)`, or `62%`.
+- Your absorb **shield** is shown next to the current health in any format, for example `1234 +300 / 2000` or `62% +300`. It disappears when the shield breaks, and you can turn it off.
 - Optional short numbers: `12.3k`, `1.5m`.
 - Enemy targets show `45%`. Forever's Classic-style servers only give a percentage for enemy health, not real numbers. Party and raid members, and you, show full values.
 - Dead and ghost units show `Dead` or `Ghost`. The resource text is hidden for targets with no resource.
@@ -62,8 +63,9 @@ Drag the minimap button to move it along the minimap edge. Its position is saved
 | Player resource | on                  | Mana / energy / rage text on your own frame               |
 | Target health   | on                  | Health text on the target frame                           |
 | Target resource | on                  | Mana / energy / rage text on the target frame             |
-| Text format     | `1234 / 2000`       | Value only, value and percent, or percent only            |
+| Text format     | `1234 / 2000`       | Value and max, current only, value and percent, or percent only |
 | Short numbers   | on                  | Shortens numbers from 10,000 up (`12.3k`, `1.5m`)         |
+| Show shield amount | on               | Absorb shield next to current health (`1234 +300 / 2000`) |
 | Show minimap button | on              | The settings button on the minimap edge                   |
 
 Changes apply immediately and are saved account-wide in `WTF\Account\<account>\SavedVariables\AlwaysOnDisplay.lua`.
@@ -139,6 +141,9 @@ The tests cover:
 - **Live updates**: energy ticks, shapeshifts, and filtering events by unit.
 - **Options**: settings registration and types, the dropdown choices, live changes from the panel, and `/aod` / `/aod reset`.
 - **Secret values**: the mock's secret numbers raise on math, comparisons and concatenation, like the client. The tests run every scenario the docs disagree on: percent API missing, plain or secret; `string.format` accepting or refusing secrets; with and without `AbbreviateLargeNumbers`. They also cover secret target values, the fallback to Blizzard's text, and `/aod debug`.
+- **Current-only format and shield** (`tests/test_shield.lua`): the shield in every format, short numbers, targets, the opt-out, clients without `UnitGetTotalAbsorbs`, and secret shields with and without the `C_StringUtil` zero-aware helpers.
+
+**About secret shields:** while the shield amount is readable, a shield of 0 is simply hidden. When it's a secret, the addon isn't allowed to compare it with 0. It then uses the client's `C_StringUtil.TruncateWhenZero` and `WrapString` helpers, which can turn a secret 0 into an empty string. If the client doesn't have them, the shield is left out instead of showing a constant `+0`. `/aod debug` shows whether the client has these helpers.
 - **Minimap button**: creation, default and saved positions, click, tooltip, dragging (including minimap scale), hiding and showing, `/aod minimap`, and the AddOns-menu entry.
 
 The mock loads the Lua files in the order the `.toc` lists them, the same way the game does.
