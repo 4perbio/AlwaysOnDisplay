@@ -2,7 +2,7 @@
 ## Title: AlwaysOnDisplay
 ## Notes: Always shows health and mana/energy/rage values on the player and target frames.
 ## Author: Alejandro Perez
-## Version: 1.0.0
+## Version: dev
 ## SavedVariables: AlwaysOnDisplayDB
 ## IconTexture: Interface\AddOns\AlwaysOnDisplay\Icon
 ## AddonCompartmentFunc: AlwaysOnDisplay_OnAddonCompartmentClick

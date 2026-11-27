@@ -64,7 +64,7 @@ test("hovering shows a tooltip that explains click and drag", function()
     b:GetScript("OnEnter")(b)
     truthy(env.tooltip.shown)
     truthy(env.tooltip.owner == b)
-    eq(env.tooltip.lines[1], "AlwaysOnDisplay")
+    truthy(env.tooltip.lines[1]:find("^AlwaysOnDisplay"), "title first")
     local all = table.concat(env.tooltip.lines, "\n")
     truthy(all:find("open settings"), "mentions click")
     truthy(all:find("move"), "mentions drag")
@@ -146,4 +146,34 @@ test("addon compartment entry opens the settings", function()
         "declared in the .toc")
     AlwaysOnDisplay_OnAddonCompartmentClick("AlwaysOnDisplay", "LeftButton")
     eq(env.opened[1], 4242)
+end)
+
+---------------------------------------------------------------------------
+-- Version in the tooltip
+---------------------------------------------------------------------------
+local function tooltipTitle(opts)
+    local env = loggedIn(opts)
+    local b = env.ns.minimapButton
+    b:GetScript("OnEnter")(b)
+    return env.tooltip.lines[1]
+end
+
+test("tooltip shows the release version from the .toc, small and grey", function()
+    eq(tooltipTitle({ tocVersion = "1.0.6" }), "AlwaysOnDisplay |cff808080v1.0.6|r")
+end)
+
+test("tooltip version follows whatever the .toc says", function()
+    eq(tooltipTitle({ tocVersion = "2.3.10" }), "AlwaysOnDisplay |cff808080v2.3.10|r")
+end)
+
+test("the repository copy reads 'dev' from the real .toc", function()
+    eq(tooltipTitle(), "AlwaysOnDisplay |cff808080dev build|r")
+end)
+
+test("works with the older global GetAddOnMetadata", function()
+    eq(tooltipTitle({ metadataAPI = "legacy", tocVersion = "1.0.6" }), "AlwaysOnDisplay |cff808080v1.0.6|r")
+end)
+
+test("no metadata API: plain title, no error", function()
+    eq(tooltipTitle({ metadataAPI = "none" }), "AlwaysOnDisplay")
 end)

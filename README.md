@@ -55,7 +55,7 @@ Everything is on by default. To change it:
 - open **Options → AddOns → AlwaysOnDisplay**, or
 - type `/aod` to open that panel directly.
 
-Drag the minimap button to move it along the minimap edge. Its position is saved.
+Drag the minimap button to move it along the minimap edge. Its position is saved. Hovering over it shows the installed version, for example `v1.0.6`.
 
 | Option          | Default             | What it does                                              |
 |-----------------|---------------------|-----------------------------------------------------------|
@@ -179,7 +179,7 @@ gh variable set CF_PROJECT_ID -R 4perbio/AlwaysOnDisplay --body 123456
 
 The upload logic is in `.github/scripts/curseforge-upload.sh`.
 
-The first release uses the version already written in `AlwaysOnDisplay.toc` (`1.0.0`). After that, the git tags are the source of truth. The `## Version:` line in the repository is not updated, so only the release zip carries the real number.
+The git tags are the source of truth for versions. If there are none, the first release is `1.0.0`. In the repository, `AlwaysOnDisplay.toc` says `## Version: dev`. Each release zip gets the real number written in, and the minimap tooltip reads it from there. So a copy installed from a release shows `v1.0.6`, and one copied straight from the repository shows `dev build`.
 
 Fengari runs Lua 5.3, but the game runs Lua 5.1. Keep the addon code to features both versions have: no `//`, no `goto`, no integer-only operations.
 

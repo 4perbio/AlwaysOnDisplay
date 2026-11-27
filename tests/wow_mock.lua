@@ -107,7 +107,7 @@ local GLOBALS_TO_RESET = {
     "Settings", "CreateFrame", "Minimap", "GameTooltip", "GetCursorPosition",
     "AlwaysOnDisplay_OnAddonCompartmentClick", "AlwaysOnDisplayMinimapButton",
     "issecretvalue", "UnitHealthPercent", "UnitPowerPercent", "CurveConstants", "AbbreviateLargeNumbers",
-    "UnitGetTotalAbsorbs", "C_StringUtil",
+    "UnitGetTotalAbsorbs", "C_StringUtil", "C_AddOns", "GetAddOnMetadata",
 }
 
 -- Lua files in the order the .toc lists them, as the client loads them.
@@ -233,6 +233,24 @@ function M.new(opts)
     end
     _G.UnitPlayerOrPetInParty = function(unit) return u(unit).inParty or false end
     _G.UnitPlayerOrPetInRaid = function(unit) return u(unit).inRaid or false end
+    -- Addon metadata read from the real .toc ("## Key: value").
+    --   opts.tocVersion:  overrides "## Version" (as a release zip would have it)
+    --   opts.metadataAPI: "modern" (default, C_AddOns) | "legacy" (global) | "none"
+    local function metadata(name, key)
+        assert(name == ADDON_NAME, "metadata asked for another addon: " .. tostring(name))
+        if key == "Version" and opts.tocVersion then return opts.tocVersion end
+        for line in M.toc():gmatch("[^\r\n]+") do
+            local k, v = line:match("^## ([^:]+):%s*(.-)%s*$")
+            if k == key then return v end
+        end
+    end
+    local metadataAPI = opts.metadataAPI or "modern"
+    if metadataAPI == "modern" then
+        _G.C_AddOns = { GetAddOnMetadata = metadata }
+    elseif metadataAPI == "legacy" then
+        _G.GetAddOnMetadata = metadata
+    end
+
     -- opts.noAbsorbAPI: client without UnitGetTotalAbsorbs.
     if not opts.noAbsorbAPI then
         _G.UnitGetTotalAbsorbs = function(unit) return u(unit).absorbs or 0 end

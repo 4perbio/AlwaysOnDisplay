@@ -5,7 +5,8 @@ name: Test & release
 #   - default: patch bump (1.2.3 -> 1.2.4)
 #   - "#minor" in any pushed commit message: 1.2.3 -> 1.3.0
 #   - "#major" in any pushed commit message: 1.2.3 -> 2.0.0
-# The first release uses the "## Version:" from the .toc.
+# Versions come from the git tags (v1.0.0 if there are none). The .toc in the
+# repository says "dev"; the zip's .toc gets the real version.
 # The same zip is then uploaded to CurseForge when it is configured
 # (see "Releases" in README.md).
 
@@ -50,6 +51,8 @@ jobs:
           latest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
           if [ -z "$latest" ]; then
             next=$(sed -n 's/^## Version:[[:space:]]*//p' AlwaysOnDisplay/AlwaysOnDisplay.toc | tr -d '\r')
+            # The repository .toc says "dev"; only a real x.y.z there seeds the first release.
+            [[ "$next" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || next=1.0.0
           else
             IFS=. read -r major minor patch <<< "${latest#v}"
             messages=$(jq -r '[.commits[]?.message] | join("\n")' "$GITHUB_EVENT_PATH")

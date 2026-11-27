@@ -1,0 +1,1 @@
+Always shows your health, mana, energy or rage, and shields, as numbers on the default player and target frames. No hovering needed. Four formats, fully configurable.

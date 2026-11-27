@@ -28,9 +28,21 @@ local function OnDragUpdate()
     Position()
 end
 
+-- Version from the .toc; release zips get the real number written in by the
+-- release workflow, a copy run straight from the repository says "dev".
+local function Version()
+    local get = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+    if not get then return nil end
+    local ok, v = pcall(get, addonName, "Version")
+    if not ok or type(v) ~= "string" or v == "" then return nil end
+    if v:match("^%d") then return "v" .. v end
+    return v .. " build"
+end
+
 local function ShowTooltip(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText("AlwaysOnDisplay")
+    local version = Version()
+    GameTooltip:SetText(version and ("AlwaysOnDisplay |cff808080" .. version .. "|r") or "AlwaysOnDisplay")
     GameTooltip:AddLine("|cffffffffClick|r to open settings", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("|cffffffffDrag|r to move this button", 0.8, 0.8, 0.8)
     GameTooltip:Show()
